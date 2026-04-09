@@ -1,0 +1,25 @@
+spring:
+  application:
+    name: Vendor
+
+  data:
+    mongodb:
+      uri: mongodb://localhost:27017/jobs
+
+  mail:
+    host: smtp.gmail.com
+    port: 587
+    username: mnatikarsagar@gmail.com
+    password: gvjh ihtt xzxe oook
+    # remove spaces
+
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+
+ollama:
+  base-url: http://localhost:11434
+  model: llama3
