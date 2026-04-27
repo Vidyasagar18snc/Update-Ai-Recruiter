@@ -1,7 +1,7 @@
 package com.Vendor.service;
 
-import com.Vendor.entity.Candidate;
-import com.Vendor.entity.Job;
+import com.Vendor.model.Candidate;
+import com.Vendor.model.Job;
 import org.springframework.stereotype.Component;
 
 @Component

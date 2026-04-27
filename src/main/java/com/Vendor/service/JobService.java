@@ -1,8 +1,7 @@
 package com.Vendor.service;
 
 
-import com.Vendor.entity.Job;
-import com.Vendor.entity.JobRequest;
+import com.Vendor.model.Job;
 import com.Vendor.repository.JobRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -15,7 +14,7 @@ public class JobService {
 
     private final JobRepository jobRepository;
 
-    public Job createJob(JobRequest request) {
+    public Job createJob(Job request) {
 
         Job job = Job.builder()
                 .title(request.getTitle())
@@ -47,5 +46,19 @@ public class JobService {
 
         // ✅ Pick best job (example: latest or highest experience)
         return jobs.get(0);
+    }
+    public Job updateJob(String jobId, Job request) {
+
+        Job existingJob = jobRepository.findById(jobId)
+                .orElseThrow(() -> new RuntimeException("Job not found with id: " + jobId));
+
+        // Update all fields
+        existingJob.setTitle(request.getTitle());
+        existingJob.setExperience(request.getExperience());
+        existingJob.setDescription(request.getDescription());
+        existingJob.setSkills(request.getSkills());
+        existingJob.setLocation(request.getLocation());
+
+        return jobRepository.save(existingJob);
     }
 }

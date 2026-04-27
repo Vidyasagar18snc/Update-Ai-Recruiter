@@ -1,6 +1,6 @@
 package com.Vendor.controller;
 
-import com.Vendor.entity.CandidateResponse;
+import com.Vendor.model.CandidateResponse;
 import com.Vendor.service.ResumeService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;

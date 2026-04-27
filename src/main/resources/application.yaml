@@ -11,15 +11,40 @@ spring:
     port: 587
     username: mnatikarsagar@gmail.com
     password: gvjh ihtt xzxe oook
-    # remove spaces
-
     properties:
       mail:
         smtp:
           auth: true
           starttls:
             enable: true
+            required: true
+          connectiontimeout: 5000
+          timeout: 5000
 
-ollama:
-  base-url: http://localhost:11434
-  model: llama3
+# 🔷 AWS CONFIG (ADD THIS)
+aws:
+  secretKey: DoVaT5t4vQdKs0mDSL7NvgNEACYv9m9ryJAu5hpx
+  region: ap-southeast-2   # Sydney (from your bucket)
+  bucket: offer-letter-bucket-687159379135-ap-southeast-2-an
+
+app:
+  interview:
+    base-url: http://localhost:4200/test/
+
+  hr:
+    email: vidya.sagar@hginfotech.io
+
+interview:
+  interviewers:
+    - id: 1
+      name: A
+      email: vidyasagarnatikar07@gmail.com
+    - id: 2
+      name: B
+      email: bramhananda.kl@hginfotech.io
+    - id: 3
+      name: C
+      email: c@company.com
+    - id: 4
+      name: D
+      email: d@company.com
