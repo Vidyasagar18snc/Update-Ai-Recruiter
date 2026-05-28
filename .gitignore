@@ -35,3 +35,11 @@ out/
 
 ### VS Code ###
 .vscode/
+.env
+secrets/
+credentials.json
+tokens/
+build/
+target/
+*.log
+*.pem
