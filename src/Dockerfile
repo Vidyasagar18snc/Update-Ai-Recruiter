@@ -1,6 +1,10 @@
-
 FROM eclipse-temurin:21-jre
+ 
 WORKDIR /app
-COPY build/libs/*.jar app.jar
+ 
+COPY build/libs/Vendor-0.0.1-SNAPSHOT.jar app.jar
+ 
 EXPOSE 8080
-ENTRYPdocker build -t vendor-app .OINT ["java", "-jar", "app.jar"]
+ 
+ENTRYPOINT ["java", "-jar", "app.jar"]
+ 
