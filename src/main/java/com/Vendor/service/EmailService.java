@@ -7,190 +7,254 @@ import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Service
-public class EmailService {
+public class EmailService{
 
     @Autowired
     private JavaMailSender mailSender;
 
-    // ✅ OLD METHOD (kept)
-    public void sendStatusEmail(String toEmail, String name, String status) {
-
-        System.out.println("Sending email to: " + toEmail);
+    public void sendStatusEmail(String toEmail,String name,String status){
 
         String body;
 
-        if ("NOT_MATCH".equalsIgnoreCase(status)) {
-            body = EmailMessageUtil.skillExpNotMatchMessage(name);
-        } else {
-            body = EmailMessageUtil.buildStatusMessage(name, status);
+        if("NOT_MATCH".equalsIgnoreCase(status)){
+            body=EmailMessageUtil.skillExpNotMatchMessage(name);
+        }else{
+            body=EmailMessageUtil.buildStatusMessage(name,status);
         }
 
-        sendEmail(toEmail, "Application Status Update", body);
+        sendEmail(toEmail,"Application Status Update",body);
     }
 
-    // ❌ OLD TEST METHOD (KEEP or REMOVE based on need)
-    public void sendStatusEmailWithLink(String toEmail, String name, String status, String testLink) {
+    public void sendInterviewEmail(String toEmail,String name,String interviewLink,Object interviewTime){
 
-        System.out.println("Sending shortlisted email with link to: " + toEmail);
-
-        String body = EmailMessageUtil.buildStatusMessage(name, status, testLink);
-
-        sendEmail(toEmail, "Application Status Update", body);
-    }
-
-    // 🔥 ✅ NEW METHOD (INTERVIEW EMAIL)
-    public void sendInterviewEmail(String toEmail,
-                                   String name,
-                                   String interviewLink,
-                                   Object interviewTime) {
-
-        if (toEmail == null || toEmail.isEmpty()) {
-            System.out.println("⚠️ Email is null, skipping...");
+        if(toEmail==null||toEmail.isEmpty()){
             return;
         }
 
-        System.out.println("Sending interview email to: " + toEmail);
+        String body=EmailMessageUtil.buildInterviewMessage(name,interviewLink,interviewTime);
 
-        // ✅ Use updated template
-        String body = EmailMessageUtil.buildStatusMessage(
-                name,
-                "Shortlisted",
-                interviewLink
-        );
-
-        //  Optional: append time
-        body += "\n\n📅 Interview Time: " + interviewTime + "\n";
-
-        sendEmail(toEmail, "Interview Invitation", body);
+        sendEmail(toEmail,"Interview Invitation",body);
     }
 
-    //  RESULT EMAIL (UNCHANGED)
-    public void sendResultEmail(String to,
-                                String name,
-                                int score,
-                                int total,
-                                double percentage,
-                                int rank,
-                                String status) {
+    public void sendResultEmail(String to,String name,int score,int total,double percentage,int rank,String status){
 
-        if (to == null || to.isEmpty()) {
-            System.out.println("⚠️ Email is null, skipping email send");
+        if(to==null||to.isEmpty()){
             return;
         }
 
-        System.out.println("Sending result email to: " + to);
+        String body=EmailMessageUtil.buildResultMessage(name,score,total,percentage,rank,status);
 
-        String body = EmailMessageUtil.buildResultMessage(
-                name,
-                score,
-                total,
-                percentage,
-                rank,
-                status
-        );
-
-        sendEmail(to, "Test Result", body);
+        sendEmail(to,"Test Result",body);
     }
 
-    //  COMMON METHOD (UPDATED WITH SUBJECT SUPPORT)
-    private void sendEmail(String toEmail, String subject, String body) {
+    public void sendInterviewerNotification(String to,String candidateName,String role,String meetLink,LocalDateTime time){
 
-        SimpleMailMessage message = new SimpleMailMessage();
+        String body=EmailMessageUtil.buildInterviewerNotificationMessage(candidateName,role,meetLink,time);
+
+        sendEmail(to,"Interview Assigned - "+candidateName,body);
+    }
+
+    public void sendInterviewerSlotSelectionMail(String to,String panelName,String panelPassword,String candidateName,String role){
+
+        String body=EmailMessageUtil.buildPanelSlotSelectionMessage(to,panelName,panelPassword,candidateName,role);
+
+        sendEmail(to,"Interview Panel Assignment",body);
+    }
+
+    public void sendOfferEmail(String email,String name,String url){
+
+        String body=EmailMessageUtil.buildOfferEmailBody(name,url);
+
+        sendEmail(email,"Offer Letter - Next Steps",body);
+    }
+
+    public void sendTestLink(String email,String testLink){
+
+        if(email==null||email.isEmpty()){
+            return;
+        }
+
+        String body=EmailMessageUtil.buildTestLinkMessage(testLink);
+
+        sendEmail(email,"Online Test Invitation",body);
+    }
+
+    public void sendCandidateSlotSelectionMail(String to,String candidateName,String role,List<String> freeSlots,String accessToken){
+
+        String body=EmailMessageUtil.buildCandidateSlotSelectionMessage(candidateName,role,freeSlots,accessToken);
+
+        sendEmail(to,"Select Your Interview Slot",body);
+    }
+
+    private void sendEmail(String toEmail,String subject,String body){
+
+        SimpleMailMessage message=new SimpleMailMessage();
+
         message.setTo(toEmail);
         message.setSubject(subject);
         message.setText(body);
 
         mailSender.send(message);
 
-        System.out.println("✅ Email sent successfully!");
+        System.out.println("Email sent successfully!");
     }
-
-    public void sendHRNotification(String hrEmail,
-                                   String candidateName,
-                                   String role,
-                                   String meetLink,
-                                   LocalDateTime time) {
-
-        String subject = "🚨 Candidate Shortlisted - Interview Required";
-
-        String body = "Dear HR,\n\n" +
-                "A candidate has been shortlisted.\n\n" +
-                "👤 Name: " + candidateName + "\n" +
-                "💼 Role: " + role + "\n" +
-                "📅 Interview Time: " + time + "\n\n" +
-                "🎥 Join Interview:\n" + meetLink + "\n\n" +
-                "Please take the interview.\n\n" +
-                "AI Recruiter System";
-
-        sendEmail(hrEmail, subject, body);
-    }
-    public void sendInterviewerNotification(
-            String to,
+    public void sendHrOfferAcceptedMail(
+            String hrEmail,
             String candidateName,
-            String role,
-            String meetLink,
-            LocalDateTime time
+            String role
     ) {
 
-        String subject = "Interview Assigned - " + candidateName;
+        String body = String.format(
+                EmailMessageUtil.HR_OFFER_ACCEPTED_BODY,
+                candidateName,
+                role
+        );
 
-        String body = "Hello,\n\n"
-                + "You have been assigned an interview.\n\n"
-                + "Candidate: " + candidateName + "\n"
-                + "Role: " + role + "\n"
-                + "Time: " + time + "\n"
-                + "Meet Link: " + meetLink + "\n\n"
-                + "Thanks";
-
-        sendEmail(to, subject, body);
+        sendEmail(
+                hrEmail,
+                EmailMessageUtil.HR_OFFER_ACCEPTED_SUBJECT,
+                body
+        );
     }
 
-    public void sendOfferEmail(String email, String name, String url) {
+    public void sendHrOfferRejectedMail(
+            String hrEmail,
+            String candidateName,
+            String role
+    ) {
 
-        String subject = "Offer Letter - Next Steps";
+        String body = String.format(
+                EmailMessageUtil.HR_OFFER_REJECTED_BODY,
+                candidateName,
+                role
+        );
 
-        String body = buildOfferEmailBody(name, url);
-
-        sendEmail(email, subject, body);
+        sendEmail(
+                hrEmail,
+                EmailMessageUtil.HR_OFFER_REJECTED_SUBJECT,
+                body
+        );
     }
 
-    private String buildOfferEmailBody(String name, String url) {
+    public void sendCandidateOfferAcceptedMail(
+            String email,
+            String candidateName,
+            String candidateId
+    ) {
 
-        return "Dear " + name + ",\n\n"
-                + "We are pleased to inform you that your offer letter has been successfully generated.\n\n"
-                + "You can download your offer letter using the link below:\n"
-                + url + "\n\n"
-                + "Please review the document carefully and feel free to reach out in case of any queries.\n\n"
-                + "We look forward to having you on board.\n\n"
-                + "Best regards,\n"
-                + "HR Team";
+        String onboardingLink =
+                "http://localhost:4200/uploaddocuments/" + candidateId;
+
+        String body = String.format(
+                EmailMessageUtil.CANDIDATE_OFFER_ACCEPTED_BODY,
+                candidateName,
+                onboardingLink
+        );
+
+        sendEmail(
+                email,
+                EmailMessageUtil.CANDIDATE_OFFER_ACCEPTED_SUBJECT,
+                body
+        );
     }
 
-    public void sendTestLink(String email, String testLink) {
+    public void sendCandidateOfferRejectedMail(
+            String email,
+            String candidateName
+    ) {
 
-        if (email == null || email.isEmpty()) {
-            System.out.println("⚠️ Email is null, skipping...");
-            return;
-        }
+        String body = String.format(
+                EmailMessageUtil.CANDIDATE_OFFER_REJECTED_BODY,
+                candidateName
+        );
 
-        System.out.println("📧 Sending test link to: " + email);
+        sendEmail(
+                email,
+                EmailMessageUtil.CANDIDATE_OFFER_REJECTED_SUBJECT,
+                body
+        );
+    }
 
-        String subject = "🧠 Online Test Invitation";
+    public void sendHrDocumentUploadedMail(
+            String hrEmail,
+            String candidateName,
+            String documentType
+    ) {
 
-        String body = "Dear Candidate,\n\n"
-                + "Congratulations! You have been shortlisted for the next round.\n\n"
-                + "Please complete the online assessment using the link below:\n\n"
-                + testLink + "\n\n"
-                + "⏳ Note:\n"
-                + "- This test link is valid for 48 hours.\n"
-                + "- The test can be attempted only once.\n"
-                + "- Please ensure a stable internet connection.\n\n"
-                + "We wish you all the best!\n\n"
-                + "Best Regards,\n"
-                + "HR Team";
+        String body = String.format(
+                EmailMessageUtil.DOCUMENT_UPLOADED_BODY,
+                candidateName,
+                documentType
+        );
 
-        sendEmail(email, subject, body);
+        sendEmail(
+                hrEmail,
+                EmailMessageUtil.DOCUMENT_UPLOADED_SUBJECT,
+                body
+        );
+    }
+
+    public void sendDocumentRejectedMail(
+            String email,
+            String candidateName,
+            String documentType,
+            String remarks
+    ) {
+
+        String body = String.format(
+                EmailMessageUtil.DOCUMENT_REJECTED_BODY,
+                candidateName,
+                documentType,
+                remarks
+        );
+
+        sendEmail(
+                email,
+                EmailMessageUtil.DOCUMENT_REJECTED_SUBJECT,
+                body
+        );
+    }
+
+    public void sendAllDocumentsVerifiedMail(
+            String email,
+            String candidateName
+    ) {
+
+        String body = String.format(
+                EmailMessageUtil.ALL_DOCUMENT_VERIFIED_BODY,
+                candidateName
+        );
+
+        sendEmail(
+                email,
+                EmailMessageUtil.ALL_DOCUMENT_VERIFIED_SUBJECT,
+                body
+        );
+    }
+
+    public void sendEmployeeCredentialsMail(
+            String to,
+            String candidateName,
+            String employeeId,
+            String officialEmail,
+            String password
+    ) {
+
+        String body = String.format(
+                EmailMessageUtil.EMPLOYEE_CREDENTIALS_BODY,
+                candidateName,
+                employeeId,
+                officialEmail,
+                password
+        );
+
+        sendEmail(
+                to,
+                EmailMessageUtil.EMPLOYEE_CREDENTIALS_SUBJECT,
+                body
+        );
     }
 }

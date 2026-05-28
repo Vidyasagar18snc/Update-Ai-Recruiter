@@ -61,4 +61,13 @@ public class JobService {
 
         return jobRepository.save(existingJob);
     }
+
+    public void deleteById(String id) {
+
+        Job job = jobRepository.findById(id)
+                .orElseThrow(() ->
+                        new RuntimeException("Job not found with id: " + id));
+
+        jobRepository.delete(job);
+    }
 }

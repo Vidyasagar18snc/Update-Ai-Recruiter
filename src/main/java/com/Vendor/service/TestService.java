@@ -1,9 +1,6 @@
 package com.Vendor.service;
 import com.Vendor.dto.*;
-import com.Vendor.model.Candidate;
-import com.Vendor.model.Question;
-import com.Vendor.model.TestLink;
-import com.Vendor.model.TestResult;
+import com.Vendor.model.*;
 import com.Vendor.repository.CandidateRepository;
 import com.Vendor.repository.QuestionRepository;
 import com.Vendor.repository.ResultRepository;
@@ -29,6 +26,7 @@ public class TestService {
     private final EmailService emailService;
     private final CandidateRepository candidateRepository;
     private final ResultRepository resultRepository;
+    private final PanelService panelService;
 
     @Value("${app.interview.base-url}")
     private String testBaseUrl;
@@ -130,114 +128,165 @@ public class TestService {
     }
 
     @Transactional
-    public TestResultResponse evaluateTest(TestSubmissionRequest request) {
+    public TestResultResponse evaluateTest(TestSubmissionRequest request){
 
-        try {
+        try{
+            TestLink link=repository.findByToken(request.getToken())
+                    .orElseThrow(()-> new RuntimeException("Invalid token"));
+            if(link.isAttempted()){
 
-            TestLink link = repository.findByToken(request.getToken())
-                    .orElseThrow(() -> new RuntimeException("Invalid token"));
-
-            if (link.isAttempted()) {
                 throw new RuntimeException("Test already attempted");
             }
-
-            if (link.getExpiryTime().isBefore(LocalDateTime.now())) {
+            if(link.getExpiryTime()
+                    .isBefore(LocalDateTime.now())) {
                 throw new RuntimeException("Link expired");
             }
-
-            // ⏱ TIME
-            long endTime = System.currentTimeMillis();
-            long startTime = (link.getStartTime() != null)
-                    ? link.getStartTime()
-                    : endTime;
-
-            // ✅ convert to seconds (IMPORTANT FIX)
-            long duration = (endTime - startTime) / 1000;
-
+            long endTime= System.currentTimeMillis();
+            long startTime= (link.getStartTime()!=null)
+                            ?link.getStartTime()
+                            :endTime;
+            long duration= (endTime-startTime)/1000;
             link.setEndTime(endTime);
             link.setDuration(duration);
+            int score=0;
+            int total= request.getAnswers().size();
+            for(AnswerDTO ans:request.getAnswers()){
 
-            // 🧠 EVALUATE
-            int score = 0;
-            int total = request.getAnswers().size();
+                try{
 
-            for (AnswerDTO ans : request.getAnswers()) {
-                try {
-                    Question q = questionRepository
-                            .findById(ans.getQuestionId())
-                            .orElse(null);
+                    Question q= questionRepository.findById(ans.getQuestionId())
+                                    .orElse(null);
+                    if(q!=null
+                            &&q.getCorrectAnswer()
+                            .equalsIgnoreCase(
+                                    ans.getSelectedAnswer()
+                            )){
 
-                    if (q != null &&
-                            q.getCorrectAnswer().equalsIgnoreCase(ans.getSelectedAnswer())) {
                         score++;
                     }
 
-                } catch (Exception e) {
-                    System.err.println("⚠️ Error in question: " + ans.getQuestionId());
+                }catch(Exception e){
+
+                    System.err.println("Error in question : " +ans.getQuestionId()
+                    );
                     e.printStackTrace();
                 }
             }
+            double percentage=
+                    (total==0)
+                            ?0
+                            :((double)score/total)*100;
 
-            double percentage = (total == 0) ? 0 : ((double) score / total) * 100;
+            String status=
+                    (percentage>=80)
+                            ?"TOP_PERFORMER"
+                            :(percentage>=70)
+                            ?"PASS"
+                            :(percentage>=50)
+                            ?"REVIEW"
+                            :"FAIL";
 
-            String status = (percentage >= 80) ? "TOP_PERFORMER"
-                    : (percentage >= 70) ? "PASS"
-                    : (percentage >= 50) ? "REVIEW"
-                    : "FAIL";
-
-            // ✅ SAVE LINK (existing)
             link.setScore(score);
             link.setAttempted(true);
             repository.save(link);
+            Candidate candidate= candidateRepository.findById(link.getCandidateId())
+                            .orElse(null);
 
-            // 🔥 ✅ NEW: SAVE INTO TestResult (CRITICAL FIX)
-            Candidate candidate = candidateRepository
-                    .findById(link.getCandidateId())
-                    .orElse(null);
+            String candidateName= (candidate!=null
+                            &&candidate.getName()!=null)
+                            ?candidate.getName()
+                            :"Candidate";
 
-            String candidateName = (candidate != null && candidate.getName() != null)
-                    ? candidate.getName()
-                    : "Candidate";
+            ZoneId zone= ZoneId.systemDefault();
+            TestResult result= TestResult.builder().candidateId(link.getCandidateId())
+                            .candidateName(candidateName)
+                            .testId(link.getTestId())
+                            .score(score)
+                            .percentage(percentage)
+                            .timeTaken(duration)
+                            .startTime(Instant.ofEpochMilli(startTime)
+                                            .atZone(zone)
+                                            .toLocalDateTime()
+                            )
+                            .endTime(
+                                    Instant.ofEpochMilli(endTime)
+                                            .atZone(zone)
+                                            .toLocalDateTime()
+                            )
+                            .build();
 
-            ZoneId zone = ZoneId.systemDefault();
+            resultRepository.save(result);
 
-            TestResult result = TestResult.builder()
-                    .candidateId(link.getCandidateId())
-                    .candidateName(candidateName)
-                    .testId(link.getTestId())
-                    .score(score)
-                    .percentage(percentage)
-                    .timeTaken(duration)
-                    .startTime(Instant.ofEpochMilli(startTime).atZone(zone).toLocalDateTime())
-                    .endTime(Instant.ofEpochMilli(endTime).atZone(zone).toLocalDateTime())
-                    .build();
+            if("PASS".equals(status)
+                    ||"TOP_PERFORMER".equals(status)){
 
-            resultRepository.save(result); // ✅ THIS WAS MISSING
+                if(candidate!=null){
 
-            // 🏆 RANK (your existing logic)
-            int rank = calculateRank(link.getTestId(), link.getCandidateId());
+                    System.out.println("Candidate Role : " +candidate.getRole());
+                    candidate.setStatus("WAITING_FOR_PANEL_SLOT_SELECTION");
 
-            // 📤 RESPONSE
-            TestResultResponse response = TestResultResponse.builder()
-                    .score(score)
-                    .total(total)
-                    .percentage(percentage)
-                    .status(status)
-                    .rank(rank)
-                    .build();
+                    List<Panel> panels= panelService.assignPanel(candidate.getRole());
 
-            // 📧 EMAIL
-            sendResultEmailWithHandling(link, score, total, percentage, rank, status);
+                    System.out.println("Panels Found : " +(panels!=null ?panels.size() :0));
+                    if(panels==null ||panels.isEmpty()){
+
+                        System.out.println("No panel found for role : " +candidate.getRole());
+                        candidate.setStatus("WAITING_FOR_PANEL_ASSIGNMENT");
+                        candidateRepository.save(candidate);
+                    }else{
+                        Panel panel=panels.get(0);
+                        candidate.setAssignedPanelId(panel.getId());
+                        candidateRepository.save(candidate);
+
+                        emailService.sendInterviewerSlotSelectionMail(
+                                        panel.getEmail(),
+                                        panel.getName(),
+                                        panel.getPassword(),
+                                        candidate.getName(),
+                                        candidate.getRole()
+                                );
+                        System.out.println("Panel assigned successfully");
+                    }
+                }
+            }else if("FAIL".equals(status)){
+
+                if(candidate!=null){
+
+                    candidate.setStatus("TEST_FAILED");
+                    candidateRepository.save(candidate);
+                }
+            }
+
+            int rank= calculateRank(link.getTestId(),
+                            link.getCandidateId());
+
+            TestResultResponse response= TestResultResponse.builder()
+                            .score(score)
+                            .total(total)
+                            .percentage(percentage)
+                            .status(status)
+                            .rank(rank)
+                            .build();
+
+            sendResultEmailWithHandling(
+                    link,
+                    score,
+                    total,
+                    percentage,
+                    rank,
+                    status
+            );
 
             return response;
 
-        } catch (Exception e) {
-            System.err.println("❌ Error in evaluateTest()");
+        }catch(Exception e){
+
+            System.err.println("Error in evaluateTest()");
+
             e.printStackTrace();
-            throw new RuntimeException("Evaluation failed");
+            throw new RuntimeException("Evaluation failed : " +e.getMessage(), e);
         }
-    }
-    private void sendResultEmailWithHandling(TestLink link,
+    }    private void sendResultEmailWithHandling(TestLink link,
                                                   int score,
                                                   int total,
                                                   double percentage,
@@ -245,9 +294,7 @@ public class TestService {
                                                   String status) {
 
         final String emailTo = link.getCandidateEmail();
-
         System.out.println("📧 Email: " + emailTo);
-
         if (emailTo == null || !emailTo.contains("@")) {
             System.out.println("❌ Invalid email, skipping...");
             return;
@@ -342,13 +389,13 @@ public class TestService {
             return Collections.emptyList();
         }
 
-        //  STEP 2: Sort (Score DESC, Time ASC)
+
         results.sort(
                 Comparator.comparingInt(TestResult::getScore).reversed()
                         .thenComparingLong(TestResult::getTimeTaken)
         );
 
-        //  STEP 3: Assign Rank (Production-safe)
+
         int rank = 1;
 
         for (int i = 0; i < results.size(); i++) {

@@ -1,16 +1,21 @@
 package com.Vendor.service;
 
 import com.Vendor.config.GoogleCalendarConfig;
-import com.Vendor.config.InterviewerConfig;
+import com.Vendor.dto.CandidateAccessToken;
+import com.Vendor.dto.SlotSelectionRequest;
+import com.Vendor.model.Candidate;
 import com.Vendor.model.Interview;
+import com.Vendor.repository.CandidateAccessTokenRepository;
+import com.Vendor.repository.CandidateRepository;
 import com.Vendor.repository.InterviewRepository;
-
 import com.google.api.services.calendar.Calendar;
 import com.google.api.services.calendar.model.*;
-
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.web.server.ResponseStatusException;
 
+import java.time.*;
 import java.util.*;
 
 @Service
@@ -18,102 +23,231 @@ import java.util.*;
 public class InterviewService {
 
     private final GoogleCalendarConfig config;
+
     private final InterviewRepository interviewRepo;
-    private final InterviewerConfig interviewerConfig;
+
+    private final EmailService emailService;
+
+    private final CandidateAccessTokenRepository tokenRepository;
+
+    private final CandidateRepository candidateRepository;
+    private  final AvailabilityService availabilityService;
 
     private static final int INTERVIEW_DURATION = 60;
-    private static final int BREAK_DURATION = 10;
-
-    public synchronized Interview scheduleInterview(String candidateName, String candidateId) {
-
+    public synchronized Interview scheduleInterview(String candidateName, String candidateId, String panelEmail, String selectedSlot){
         try {
-            Calendar service = config.getCalendarService();
+            Calendar service =
+                    config.getCalendarService();
+            LocalDateTime localDateTime =
+                    LocalDateTime.parse(selectedSlot);
+            ZonedDateTime zonedDateTime =
+                    localDateTime.atZone(
+                            ZoneId.of("Asia/Kolkata")
+                    );
+            Date start =
+                    Date.from(
+                            zonedDateTime.toInstant()
+                    );
+            LocalDateTime endLocalDateTime =
+                    localDateTime.plusMinutes(
+                            INTERVIEW_DURATION
+                    );
 
-            java.util.Calendar cal = java.util.Calendar.getInstance();
-            cal.setTimeZone(TimeZone.getTimeZone("Asia/Kolkata"));
+            ZonedDateTime endZone = endLocalDateTime.atZone(ZoneId.of("Asia/Kolkata"));
 
-            // 🔥 Start from tomorrow 10 AM
-            cal.add(java.util.Calendar.DATE, 1);
-            cal.set(java.util.Calendar.HOUR_OF_DAY, 10);
-            cal.set(java.util.Calendar.MINUTE, 0);
+            Date end = Date.from(endZone.toInstant());
+            boolean alreadyBooked =
+                    interviewRepo
+                            .existsByInterviewerEmailAndStartTime(panelEmail, start);
 
-            while (true) {
+            if (alreadyBooked) {
 
-                Date start = cal.getTime();
+                throw new RuntimeException("Selected slot already booked");
+            }
+            Event event = new Event()
 
-                // ❌ Skip Saturday & Sunday
-                int day = cal.get(java.util.Calendar.DAY_OF_WEEK);
-                if (day == java.util.Calendar.SATURDAY || day == java.util.Calendar.SUNDAY) {
-                    cal.add(java.util.Calendar.DATE, 1);
-                    cal.set(java.util.Calendar.HOUR_OF_DAY, 10);
-                    cal.set(java.util.Calendar.MINUTE, 0);
-                    continue;
-                }
+                    .setSummary("Interview - " + candidateName)
 
-                // 🔍 Find free interviewer
-                InterviewerConfig.Interviewer selected = null;
-
-                for (InterviewerConfig.Interviewer i : interviewerConfig.getInterviewers()) {
-
-                    boolean busy = interviewRepo
-                            .existsByInterviewerIdAndStartTime(i.getId(), start);
-
-                    if (!busy) {
-                        selected = i;
-                        break;
-                    }
-                }
-
-                if (selected != null) {
-
-                    // ⏱️ End time
-                    java.util.Calendar endCal = java.util.Calendar.getInstance();
-                    endCal.setTime(start);
-                    endCal.add(java.util.Calendar.MINUTE, INTERVIEW_DURATION);
-                    Date end = endCal.getTime();
-
-                    // 🎥 Google Meet
-                    Event event = new Event()
-                            .setSummary("Interview - " + candidateName)
-                            .setStart(new EventDateTime()
-                                    .setDateTime(new com.google.api.client.util.DateTime(start))
-                                    .setTimeZone("Asia/Kolkata"))
-                            .setEnd(new EventDateTime()
-                                    .setDateTime(new com.google.api.client.util.DateTime(end))
-                                    .setTimeZone("Asia/Kolkata"));
-
-                    ConferenceData conf = new ConferenceData()
-                            .setCreateRequest(new CreateConferenceRequest()
-                                    .setRequestId(UUID.randomUUID().toString())
-                                    .setConferenceSolutionKey(
-                                            new ConferenceSolutionKey().setType("hangoutsMeet")));
-
-                    event.setConferenceData(conf);
-
-                    Event created = service.events()
+                    .setDescription("Technical Interview")
+                    .setStart(new EventDateTime()
+                            .setDateTime(new com.google.api.client.util.DateTime(start))
+                                    .setTimeZone("Asia/Kolkata")
+                    )
+                    .setEnd(new EventDateTime()
+                            .setDateTime(new com.google.api.client.util.DateTime(end))
+                                    .setTimeZone("Asia/Kolkata")
+                    );
+            List<EventAttendee> attendees = new ArrayList<>();
+            attendees.add(new EventAttendee().setEmail(panelEmail));
+            event.setAttendees(attendees);
+            ConferenceData conferenceData = new ConferenceData().setCreateRequest(
+                                    new CreateConferenceRequest()
+                                            .setRequestId(UUID.randomUUID().toString())
+                                            .setConferenceSolutionKey(new ConferenceSolutionKey()
+                                                    .setType("hangoutsMeet")
+                                            )
+                            );
+            event.setConferenceData(conferenceData);
+            Event createdEvent =
+                    service.events()
                             .insert("primary", event)
                             .setConferenceDataVersion(1)
                             .execute();
 
-                    // 💾 Save interview
-                    Interview interview = new Interview();
-                    interview.setCandidateId(candidateId);
-                    interview.setCandidateName(candidateName);
-                    interview.setStartTime(start);
-                    interview.setEndTime(end);
-                    interview.setMeetLink(created.getHangoutLink());
-                    interview.setInterviewerId(selected.getId());
-                    interview.setInterviewerEmail(selected.getEmail());
+            Interview interview =
+                    new Interview();
+            interview.setCandidateId(candidateId);
+            interview.setCandidateName(candidateName);
+            interview.setInterviewerEmail(panelEmail);
+            interview.setStartTime(start);
+            interview.setEndTime(end);
+            interview.setMeetLink(
+                    createdEvent.getHangoutLink()
+            );
 
-                    return interviewRepo.save(interview);
-                }
+            Interview savedInterview = interviewRepo.save(interview);
+            Candidate candidate = candidateRepository.findById(candidateId)
+                            .orElseThrow(() ->
+                                    new RuntimeException("Candidate not found")
+                            );
+            candidate.setStatus("Scheduled");
+            candidateRepository.save(candidate);
+            LocalDateTime interviewTime =
+                    savedInterview.getStartTime()
+                            .toInstant()
+                            .atZone(ZoneId.of("Asia/Kolkata"))
+                            .toLocalDateTime();
+            emailService.sendInterviewEmail(
+                    candidate.getEmail(),
+                    candidateName,
+                    savedInterview.getMeetLink(),
+                    interviewTime
+            );
+            emailService.sendInterviewerNotification(
+                    panelEmail,
+                    candidateName,
+                    candidate.getRole(),
+                    savedInterview.getMeetLink(),
+                    interviewTime
+            );
+            return savedInterview;
+        } catch (ResponseStatusException e) {
+        throw e;
+    } catch (Exception e) {
+        e.printStackTrace();
+        throw new ResponseStatusException(
+                HttpStatus.INTERNAL_SERVER_ERROR,
+                "Panel member is busy at this moment. Please choose another slot"
+        );
+    }
+    }
+    //New Logic 14/05/2026
+    public Interview scheduleInterviewUsingToken(
+            SlotSelectionRequest request
+    ) {
 
-                // ❌ All busy → next slot (60 + break)
-                cal.add(java.util.Calendar.MINUTE, INTERVIEW_DURATION + BREAK_DURATION);
-            }
+        CandidateAccessToken token =
+                tokenRepository.findByToken(
+                        request.getToken()
+                ).orElseThrow(
+                        () -> new RuntimeException(
+                                "Invalid token"
+                        )
+                );
 
-        } catch (Exception e) {
-            throw new RuntimeException("Scheduling failed", e);
+        // Token already used
+        if (token.isUsed()) {
+
+            throw new RuntimeException(
+                    "Token already used"
+            );  
         }
+
+        // Token expired
+        if (token.getExpiryTime()
+                .isBefore(LocalDateTime.now())) {
+
+            throw new RuntimeException(
+                    "Token expired"
+            );
+        }
+
+        // Get candidate
+        Candidate candidate =
+                candidateRepository.findById(
+                        token.getCandidateId()
+                ).orElseThrow(
+                        () -> new RuntimeException(
+                                "Candidate not found"
+                        )
+                );
+
+        // CALL YOUR EXISTING METHOD
+        Interview interview =
+                scheduleInterview(
+                        candidate.getName(),
+                        candidate.getId(),
+                        candidate.getPanelEmail(),
+                        request.getSelectedSlot()
+                );
+
+        // Mark token used
+        token.setUsed(true);
+
+        tokenRepository.save(token);
+
+        return interview;
+    }
+    public List<String> getSlotsByToken(
+            String tokenValue
+    ) {
+
+        CandidateAccessToken token =
+                tokenRepository.findByToken(
+                        tokenValue
+                ).orElseThrow(
+                        () -> new RuntimeException(
+                                "Invalid Token"
+                        )
+                );
+
+        // TOKEN ALREADY USED
+
+        if (token.isUsed()) {
+
+            throw new RuntimeException(
+                    "Token already used"
+            );
+        }
+
+        // TOKEN EXPIRED
+
+        if (token.getExpiryTime()
+                .isBefore(LocalDateTime.now())) {
+
+            throw new RuntimeException(
+                    "Token expired"
+            );
+        }
+
+        // GET CANDIDATE
+
+        Candidate candidate =
+                candidateRepository.findById(
+                        token.getCandidateId()
+                ).orElseThrow(
+                        () -> new RuntimeException(
+                                "Candidate not found"
+                        )
+                );
+
+        // FETCH REAL SLOTS
+
+        return availabilityService.getFreeSlots(
+                candidate.getPanelEmail(),
+                LocalDate.now()
+                        .plusDays(1)
+                        .toString()
+        );
     }
 }

@@ -34,4 +34,10 @@ public class Candidate {
 
     private String employeeId;
     private String companyEmail;
+    private String panelName;
+    private String panelEmail;
+    private List<String> freeSlots;
+    private String assignedPanelId;
+
+
 }

@@ -1,6 +1,7 @@
 package com.Vendor.service;
 
 import com.Vendor.model.OfferRequestDTO;
+import com.Vendor.repository.OfferRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -9,8 +10,10 @@ import freemarker.template.Configuration;
 
 import java.io.StringWriter;
 import java.io.ByteArrayOutputStream;
+import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.UUID;
 
 import com.openhtmltopdf.pdfboxout.PdfRendererBuilder;
 
@@ -22,13 +25,15 @@ public class OfferService {
     private final Configuration config;
     private final S3Service s3Service;
     private final UrlShortenerService urlShortenerService;
+    private  final OfferRepository offerRepository;
 
     public String sendOffer(OfferRequestDTO dto) {
 
         try {
-            String html = generateHtml(dto);
-            byte[] pdf = generatePdf(html);
 
+            String html = generateHtml(dto);
+
+            byte[] pdf = generatePdf(html);
 
             String fileName = "offers/Offer_Letter_"
                     + dto.getName() + "_"
@@ -36,26 +41,43 @@ public class OfferService {
 
             s3Service.uploadFile(pdf, fileName);
 
-            String pdfUrl = s3Service.generatePresignedUrl(fileName);
-            String shortUrl = urlShortenerService.shortenUrl(pdfUrl);
+            String pdfUrl =
+                    s3Service.generatePresignedUrl(fileName);
 
-            // ✅ Clean call (no subject/body here)
+            // GENERATE TOKEN
+            String token = UUID.randomUUID().toString();
+
+            // SAVE DATA
+            dto.setOfferPdfUrl(pdfUrl);
+            dto.setOfferToken(token);
+            dto.setOfferStatus("SENT");
+            dto.setCreatedAt(LocalDateTime.now());
+
+            offerRepository.save(dto);
+
+            // FRONTEND URL
+            String frontendUrl =
+                    "http://localhost:4200/offer-response/" + token;
+
+            // SEND EMAIL
             emailService.sendOfferEmail(
                     dto.getEmail(),
                     dto.getName(),
-                    shortUrl
+                    frontendUrl
             );
 
-            return "Offer sent successfully via S3 link";
-
-
+            return "Offer sent successfully";
 
         } catch (Exception e) {
+
             e.printStackTrace();
-            throw new RuntimeException("Error sending offer: " + e.getMessage());
+
+            throw new RuntimeException(
+                    "Error sending offer: "
+                            + e.getMessage()
+            );
         }
     }
-
     // ✅ FTL → HTML
     private String generateHtml(OfferRequestDTO dto) throws Exception {
 

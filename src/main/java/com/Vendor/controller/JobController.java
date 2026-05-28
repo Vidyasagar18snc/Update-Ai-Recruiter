@@ -1,7 +1,7 @@
 package com.Vendor.controller;
 
 import com.Vendor.model.Job;
-import com.Vendor.service.EmployeeService;
+import com.Vendor.service.DocumentService;
 import com.Vendor.service.JobService;
 import com.Vendor.util.JDParsingService;
 import lombok.RequiredArgsConstructor;
@@ -19,7 +19,7 @@ public class JobController {
 
     private final JobService jobService;
     private final JDParsingService jdParsingService;
-    private final EmployeeService employeeService;
+    private final DocumentService employeeService;
 
     @PostMapping("/jobs")
     public Job create(@RequestBody Job job
@@ -53,11 +53,12 @@ public class JobController {
     ) {
         return jobService.updateJob(id, request);
     }
-    @PostMapping("/create")
-    public String createEmployee(@PathVariable String candidateId) {
 
-        employeeService.createEmployee(candidateId);
+    @DeleteMapping("/jobs/{id}")
+    public ResponseEntity<String> deleteJob(@PathVariable String id) {
 
-        return "Employee created successfully";
+        jobService.deleteById(id);
+
+        return ResponseEntity.ok("Job deleted successfully");
     }
 }

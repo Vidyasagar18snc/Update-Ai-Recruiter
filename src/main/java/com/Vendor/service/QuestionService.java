@@ -20,7 +20,6 @@ public class QuestionService {
 
     // ✅ Get all questions (without answers)
     public List<QuestionDTO> getAllQuestions() {
-
         List<Question> questions = repository.findAll();
 
         // 🔥 Shuffle questions (optional but recommended)

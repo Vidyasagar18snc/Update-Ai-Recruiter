@@ -4,6 +4,7 @@ import lombok.Data;
 import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.mapping.Document;
 
+import java.time.LocalDate;
 import java.util.Date;
 
 @Data
@@ -12,25 +13,14 @@ public class Interview {
 
     @Id
     private String id;
-
-    // Candidate info
     private String candidateId;
     private String candidateName;
-
-    // Interview timing
     private Date startTime;
     private Date endTime;
-
-    // Google Meet link
     private String meetLink;
-
-    // Interviewer info
     private String interviewerId;
     private String interviewerEmail;
-
-    // Status (optional but useful)
-    private String status; // SCHEDULED / COMPLETED / CANCELLED
-
-    // Audit fields (optional but recommended)
+    private String status;
     private Date createdAt = new Date();
+
 }
